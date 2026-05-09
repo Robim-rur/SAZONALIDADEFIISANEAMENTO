@@ -6,11 +6,11 @@ import plotly.express as px
 from datetime import datetime
 
 # =========================================================
-# CONFIG
+# CONFIGURAÇÃO DA PÁGINA
 # =========================================================
 
 st.set_page_config(
-    page_title="Sazonalidade B3",
+    page_title="Sazonalidade Estatística B3",
     layout="wide"
 )
 
@@ -37,6 +37,7 @@ if not st.session_state.autenticado:
         if senha == SENHA_CORRETA:
             st.session_state.autenticado = True
             st.rerun()
+
         else:
             st.error("Senha incorreta.")
 
@@ -47,28 +48,88 @@ if not st.session_state.autenticado:
 # =========================================================
 
 ATIVOS = [
-    # FIIs
+
+    # =====================================================
+    # FIIs DE TIJOLO
+    # =====================================================
+
     "HGLG11.SA",
     "XPLG11.SA",
     "KNRI11.SA",
     "BTLG11.SA",
     "VISC11.SA",
-    "MXRF11.SA",
     "TRXF11.SA",
     "GARE11.SA",
     "GGRC11.SA",
+    "LVBI11.SA",
+    "PVBI11.SA",
+    "VILG11.SA",
+    "HGRU11.SA",
+    "RBRP11.SA",
+    "PATL11.SA",
+    "RECT11.SA",
+    "MALL11.SA",
+    "HSML11.SA",
+    "XPML11.SA",
+    "JSRE11.SA",
+    "ALZR11.SA",
 
-    # Energia
+    # =====================================================
+    # ENERGIA
+    # =====================================================
+
     "TAEE11.SA",
-    "CPLE6.SA",
+    "TAEE4.SA",
+    "TAEE3.SA",
     "CMIG4.SA",
+    "CMIG3.SA",
+    "CPLE6.SA",
+    "CPLE3.SA",
     "EGIE3.SA",
     "TRPL4.SA",
+    "TRPL3.SA",
+    "ALUP11.SA",
+    "ALUP4.SA",
+    "ALUP3.SA",
+    "ENGI11.SA",
+    "ENGI4.SA",
+    "ENGI3.SA",
+    "ENEV3.SA",
+    "EQTL3.SA",
+    "AURE3.SA",
+    "NEOE3.SA",
+    "AESB3.SA",
 
-    # Saneamento
+    # =====================================================
+    # SANEAMENTO
+    # =====================================================
+
     "SBSP3.SA",
-    "CSMG3.SA"
+    "CSMG3.SA",
+    "SAPR11.SA",
+    "SAPR4.SA",
+    "SAPR3.SA",
+    "ORVR3.SA"
 ]
+
+# =========================================================
+# MAPA DE MESES
+# =========================================================
+
+MESES = {
+    1: "Janeiro",
+    2: "Fevereiro",
+    3: "Março",
+    4: "Abril",
+    5: "Maio",
+    6: "Junho",
+    7: "Julho",
+    8: "Agosto",
+    9: "Setembro",
+    10: "Outubro",
+    11: "Novembro",
+    12: "Dezembro"
+}
 
 # =========================================================
 # FUNÇÕES
@@ -78,9 +139,10 @@ ATIVOS = [
 def baixar_dados(ticker):
 
     try:
+
         df = yf.download(
             ticker,
-            period="15y",
+            period="20y",
             interval="1mo",
             auto_adjust=True,
             progress=False
@@ -91,7 +153,9 @@ def baixar_dados(ticker):
 
         df = df[["Close"]].copy()
 
-        df["Retorno"] = df["Close"].pct_change() * 100
+        df["Retorno"] = (
+            df["Close"].pct_change() * 100
+        )
 
         df.dropna(inplace=True)
 
@@ -104,18 +168,63 @@ def baixar_dados(ticker):
         return None
 
 
+def classificar_confianca(amostra):
+
+    if amostra >= 10:
+        return "Excelente"
+
+    elif amostra >= 7:
+        return "Forte"
+
+    elif amostra >= 5:
+        return "Boa"
+
+    elif amostra >= 3:
+        return "Moderada"
+
+    else:
+        return "Fraca"
+
+
+def multiplicador_confianca(amostra):
+
+    if amostra >= 10:
+        return 1.00
+
+    elif amostra >= 7:
+        return 0.90
+
+    elif amostra >= 5:
+        return 0.80
+
+    elif amostra >= 3:
+        return 0.65
+
+    else:
+        return 0.50
+
+
 def calcular_estatisticas(df, ticker, mes_atual):
 
-    df_mes = df[df["Mes"] == mes_atual].copy()
+    df_mes = df[
+        df["Mes"] == mes_atual
+    ].copy()
 
-    if len(df_mes) < 5:
+    if len(df_mes) < 2:
         return None
 
-    positivos = df_mes[df_mes["Retorno"] > 0]
-    negativos = df_mes[df_mes["Retorno"] <= 0]
+    positivos = df_mes[
+        df_mes["Retorno"] > 0
+    ]
+
+    negativos = df_mes[
+        df_mes["Retorno"] <= 0
+    ]
+
+    amostra = len(df_mes)
 
     taxa_acerto = round(
-        (len(positivos) / len(df_mes)) * 100,
+        (len(positivos) / amostra) * 100,
         2
     )
 
@@ -129,13 +238,13 @@ def calcular_estatisticas(df, ticker, mes_atual):
         2
     )
 
-    pior_mes = round(
-        df_mes["Retorno"].min(),
+    melhor_mes = round(
+        df_mes["Retorno"].max(),
         2
     )
 
-    melhor_mes = round(
-        df_mes["Retorno"].max(),
+    pior_mes = round(
+        df_mes["Retorno"].min(),
         2
     )
 
@@ -152,32 +261,42 @@ def calcular_estatisticas(df, ticker, mes_atual):
     sharpe = 0
 
     if volatilidade != 0:
-        sharpe = round(retorno_medio / volatilidade, 2)
+        sharpe = round(
+            retorno_medio / volatilidade,
+            2
+        )
 
-    score = (
+    score_base = (
         taxa_acerto * 0.4
         + retorno_medio * 0.3
         + sharpe * 20
         - abs(pior_mes) * 0.1
     )
 
-    score = round(score, 2)
+    score_final = (
+        score_base
+        * multiplicador_confianca(amostra)
+    )
+
+    score_final = round(score_final, 2)
 
     return {
         "Ativo": ticker.replace(".SA", ""),
-        "Amostra": len(df_mes),
-        "Taxa de Acerto (%)": taxa_acerto,
+        "Amostra": amostra,
+        "Confiança": classificar_confianca(amostra),
+        "Taxa Acerto (%)": taxa_acerto,
         "Retorno Médio (%)": retorno_medio,
         "Volatilidade (%)": volatilidade,
-        "Sharpe Simplificado": sharpe,
+        "Sharpe": sharpe,
         "Gain Médio (%)": gain_medio,
         "Loss Médio (%)": loss_medio,
         "Melhor Mês (%)": melhor_mes,
         "Pior Mês (%)": pior_mes,
-        "Score": score
+        "Score": score_final
     }
 
 
+@st.cache_data(ttl=3600)
 def gerar_heatmap():
 
     heatmap_data = []
@@ -195,20 +314,24 @@ def gerar_heatmap():
 
         for mes in range(1, 13):
 
-            df_mes = df[df["Mes"] == mes]
+            df_mes = df[
+                df["Mes"] == mes
+            ]
 
             if len(df_mes) == 0:
                 valor = np.nan
+
             else:
-                valor = round(df_mes["Retorno"].mean(), 2)
+                valor = round(
+                    df_mes["Retorno"].mean(),
+                    2
+                )
 
             linha[mes] = valor
 
         heatmap_data.append(linha)
 
-    heatmap_df = pd.DataFrame(heatmap_data)
-
-    return heatmap_df
+    return pd.DataFrame(heatmap_data)
 
 # =========================================================
 # APP
@@ -216,50 +339,32 @@ def gerar_heatmap():
 
 mes_atual = datetime.now().month
 
-meses_nome = {
-    1: "Janeiro",
-    2: "Fevereiro",
-    3: "Março",
-    4: "Abril",
-    5: "Maio",
-    6: "Junho",
-    7: "Julho",
-    8: "Agosto",
-    9: "Setembro",
-    10: "Outubro",
-    11: "Novembro",
-    12: "Dezembro"
-}
-
-nome_mes_atual = meses_nome[mes_atual]
+nome_mes = MESES[mes_atual]
 
 st.title("📊 Sazonalidade Estatística B3")
 
 st.markdown(f"""
-### Mês analisado:
-# {nome_mes_atual}
-""")
+# {nome_mes}
 
-st.markdown("""
-Este app analisa:
+Análise estatística histórica mensal de:
 - FIIs de tijolo
-- ações perenes
-- utilities da B3
+- Empresas de energia
+- Empresas de saneamento
 
-Com base em:
+Baseado em:
 - frequência histórica de alta
 - retorno médio
 - volatilidade
-- expectativa estatística
+- expectativa matemática
+- robustez estatística
 """)
 
 # =========================================================
-# RANKING
+# PROCESSAMENTO
 # =========================================================
 
-st.header("🏆 Ranking Estatístico do Mês Atual")
-
-resultado = []
+resultado_robusto = []
+resultado_jovem = []
 
 barra = st.progress(0)
 
@@ -276,141 +381,243 @@ for i, ticker in enumerate(ATIVOS):
         )
 
         if stats is not None:
-            resultado.append(stats)
 
-    barra.progress((i + 1) / len(ATIVOS))
+            if stats["Amostra"] >= 5:
+                resultado_robusto.append(stats)
 
-ranking = pd.DataFrame(resultado)
+            else:
+                resultado_jovem.append(stats)
 
-ranking.sort_values(
-    by="Score",
-    ascending=False,
-    inplace=True
-)
-
-ranking.reset_index(drop=True, inplace=True)
-
-st.dataframe(
-    ranking,
-    use_container_width=True
-)
+    barra.progress(
+        (i + 1) / len(ATIVOS)
+    )
 
 # =========================================================
-# TOP 5
+# TABELA PRINCIPAL
 # =========================================================
 
-st.header("🔥 Top 5 Melhores Ativos")
+st.header("🏆 Ranking Principal")
 
-top5 = ranking.head(5)
+ranking = pd.DataFrame(resultado_robusto)
 
-fig = px.bar(
-    top5,
-    x="Ativo",
-    y="Score",
-    text="Score"
+if not ranking.empty:
+
+    ranking.sort_values(
+        by="Score",
+        ascending=False,
+        inplace=True
+    )
+
+    ranking.reset_index(
+        drop=True,
+        inplace=True
+    )
+
+    st.dataframe(
+        ranking,
+        use_container_width=True
+    )
+
+else:
+
+    st.warning(
+        "Nenhum ativo encontrado."
+    )
+
+# =========================================================
+# TABELA SECUNDÁRIA
+# =========================================================
+
+st.header("⚠️ Ativos com Baixa Amostragem")
+
+ranking_jovem = pd.DataFrame(
+    resultado_jovem
 )
 
-fig.update_layout(
-    height=500
-)
+if not ranking_jovem.empty:
 
-st.plotly_chart(
-    fig,
-    use_container_width=True
-)
+    ranking_jovem.sort_values(
+        by="Score",
+        ascending=False,
+        inplace=True
+    )
+
+    ranking_jovem.reset_index(
+        drop=True,
+        inplace=True
+    )
+
+    st.dataframe(
+        ranking_jovem,
+        use_container_width=True
+    )
+
+else:
+
+    st.info(
+        "Nenhum ativo jovem encontrado."
+    )
+
+# =========================================================
+# TOP 10
+# =========================================================
+
+if not ranking.empty:
+
+    st.header("🔥 Top 10 Scores")
+
+    top10 = ranking.head(10)
+
+    fig = px.bar(
+        top10,
+        x="Ativo",
+        y="Score",
+        text="Score"
+    )
+
+    fig.update_layout(
+        height=600
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
 
 # =========================================================
 # HEATMAP
 # =========================================================
 
-st.header("🌡️ Heatmap de Retorno Médio Mensal")
+st.header("🌡️ Heatmap de Retornos Médios")
 
 heatmap_df = gerar_heatmap()
 
-heatmap_plot = heatmap_df.set_index("Ativo")
+if not heatmap_df.empty:
 
-heatmap_plot.columns = [
-    "Jan",
-    "Fev",
-    "Mar",
-    "Abr",
-    "Mai",
-    "Jun",
-    "Jul",
-    "Ago",
-    "Set",
-    "Out",
-    "Nov",
-    "Dez"
-]
+    heatmap_plot = heatmap_df.set_index(
+        "Ativo"
+    )
 
-fig2 = px.imshow(
-    heatmap_plot,
-    text_auto=True,
-    aspect="auto"
-)
+    heatmap_plot.columns = [
+        "Jan",
+        "Fev",
+        "Mar",
+        "Abr",
+        "Mai",
+        "Jun",
+        "Jul",
+        "Ago",
+        "Set",
+        "Out",
+        "Nov",
+        "Dez"
+    ]
 
-fig2.update_layout(
-    height=700
-)
+    fig2 = px.imshow(
+        heatmap_plot,
+        text_auto=True,
+        aspect="auto"
+    )
 
-st.plotly_chart(
-    fig2,
-    use_container_width=True
-)
+    fig2.update_layout(
+        height=1000
+    )
+
+    st.plotly_chart(
+        fig2,
+        use_container_width=True
+    )
 
 # =========================================================
 # DETALHAMENTO
 # =========================================================
 
-st.header("🔎 Detalhamento por Ativo")
+if not ranking.empty:
 
-ativo_escolhido = st.selectbox(
-    "Escolha um ativo:",
-    ranking["Ativo"].tolist()
-)
+    st.header("🔎 Detalhamento por Ativo")
 
-ticker_detalhe = ativo_escolhido + ".SA"
-
-df_detalhe = baixar_dados(ticker_detalhe)
-
-if df_detalhe is not None:
-
-    df_mes = df_detalhe[
-        df_detalhe["Mes"] == mes_atual
-    ].copy()
-
-    st.subheader(
-        f"Retornos Históricos de {ativo_escolhido} em {nome_mes_atual}"
+    ativo_escolhido = st.selectbox(
+        "Escolha um ativo:",
+        ranking["Ativo"].tolist()
     )
 
-    tabela = df_mes[[
-        "Ano",
-        "Retorno"
-    ]].copy()
-
-    tabela["Retorno"] = tabela["Retorno"].round(2)
-
-    st.dataframe(
-        tabela,
-        use_container_width=True
+    ticker_detalhe = (
+        ativo_escolhido + ".SA"
     )
 
-    fig3 = px.bar(
-        tabela,
-        x="Ano",
-        y="Retorno",
-        text="Retorno"
+    df_detalhe = baixar_dados(
+        ticker_detalhe
     )
 
-    fig3.update_layout(
-        height=500
-    )
+    if df_detalhe is not None:
 
-    st.plotly_chart(
-        fig3,
-        use_container_width=True
-    )
+        df_mes = df_detalhe[
+            df_detalhe["Mes"] == mes_atual
+        ].copy()
+
+        if not df_mes.empty:
+
+            st.subheader(
+                f"""
+                Retornos Históricos de
+                {ativo_escolhido}
+                em {nome_mes}
+                """
+            )
+
+            tabela = df_mes[[
+                "Ano",
+                "Retorno"
+            ]].copy()
+
+            tabela.reset_index(
+                drop=True,
+                inplace=True
+            )
+
+            tabela["Ano"] = (
+                tabela["Ano"]
+                .astype(str)
+            )
+
+            tabela["Retorno"] = (
+                pd.to_numeric(
+                    tabela["Retorno"],
+                    errors="coerce"
+                )
+            )
+
+            tabela.dropna(
+                inplace=True
+            )
+
+            tabela["Retorno"] = (
+                tabela["Retorno"]
+                .round(2)
+            )
+
+            st.dataframe(
+                tabela,
+                use_container_width=True
+            )
+
+            if not tabela.empty:
+
+                fig3 = px.bar(
+                    tabela,
+                    x="Ano",
+                    y="Retorno",
+                    text="Retorno"
+                )
+
+                fig3.update_layout(
+                    height=600
+                )
+
+                st.plotly_chart(
+                    fig3,
+                    use_container_width=True
+                )
 
 # =========================================================
 # RODAPÉ
@@ -419,25 +626,29 @@ if df_detalhe is not None:
 st.markdown("---")
 
 st.markdown("""
-### 📌 Interpretação
+## 📌 Interpretação
 
-- Taxa de Acerto:
+### Taxa Acerto
 Percentual histórico de meses positivos.
 
-- Retorno Médio:
-Média histórica de retorno naquele mês.
+### Retorno Médio
+Média histórica de retorno do mês.
 
-- Sharpe Simplificado:
-Relação retorno/risco.
+### Gain Médio
+Média apenas dos meses positivos.
 
-- Gain Médio:
-Média dos meses positivos.
+### Loss Médio
+Média apenas dos meses negativos.
 
-- Loss Médio:
-Média dos meses negativos.
+### Sharpe
+Retorno ajustado pela volatilidade.
 
-- Score:
-Ranking estatístico geral.
+### Confiança
+Robustez estatística baseada no tamanho da amostra.
 
-⚠️ Este app é puramente estatístico e não constitui recomendação de investimento.
+### Score
+Pontuação quantitativa final do ativo.
+
+⚠️ Aplicação puramente estatística.
+Não constitui recomendação de investimento.
 """)
