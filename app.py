@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import yfinance as yf
+from ta.trend import EMAIndicator, ADXIndicator
+from ta.momentum import StochasticOscillator
 from datetime import datetime
 
 # =====================================================
@@ -9,7 +11,7 @@ from datetime import datetime
 # =====================================================
 
 st.set_page_config(
-    page_title="Sazonalidade B3",
+    page_title="Sazonalidade + Setup Técnico",
     layout="wide"
 )
 
@@ -46,10 +48,10 @@ if not st.session_state.logado:
 # TÍTULO
 # =====================================================
 
-st.title("📊 Sazonalidade Estatística B3")
+st.title("📊 Sazonalidade + Setup Técnico")
 
 # =====================================================
-# MÊS ATUAL
+# MÊS
 # =====================================================
 
 MESES = {
@@ -74,15 +76,12 @@ st.subheader(
 )
 
 # =====================================================
-# LISTA DE ATIVOS
+# ATIVOS
 # =====================================================
 
 ATIVOS = [
 
-    # =================================================
     # FIIs
-    # =================================================
-
     "HGLG11.SA",
     "KNRI11.SA",
     "XPLG11.SA",
@@ -93,19 +92,9 @@ ATIVOS = [
     "VISC11.SA",
     "XPML11.SA",
     "MALL11.SA",
-    "HSML11.SA",
-    "PVBI11.SA",
-    "LVBI11.SA",
-    "VILG11.SA",
-    "HGRU11.SA",
-    "ALZR11.SA",
 
-    # =================================================
-    # ENERGIA
-    # =================================================
-
+    # Energia
     "TAEE11.SA",
-    "TAEE4.SA",
     "CMIG4.SA",
     "CPLE6.SA",
     "EGIE3.SA",
@@ -113,19 +102,11 @@ ATIVOS = [
     "EQTL3.SA",
     "ALUP11.SA",
     "ENGI11.SA",
-    "NEOE3.SA",
-    "ENEV3.SA",
-    "AURE3.SA",
 
-    # =================================================
-    # SANEAMENTO
-    # =================================================
-
+    # Saneamento
     "SBSP3.SA",
     "CSMG3.SA",
-    "SAPR4.SA",
-    "SAPR11.SA",
-    "ORVR3.SA"
+    "SAPR4.SA"
 ]
 
 # =====================================================
@@ -157,20 +138,7 @@ def calcular_score(acerto, retorno):
     return round(score, 2)
 
 
-# =====================================================
-# RESULTADOS
-# =====================================================
-
-resultados_principais = []
-resultados_jovens = []
-
-# =====================================================
-# PROCESSAMENTO
-# =====================================================
-
-barra = st.progress(0)
-
-for i, ticker in enumerate(ATIVOS):
+def analisar_sazonalidade(ticker):
 
     try:
 
@@ -178,11 +146,12 @@ for i, ticker in enumerate(ATIVOS):
             ticker,
             period="15y",
             interval="1mo",
-            progress=False
+            progress=False,
+            auto_adjust=True
         )
 
         if df.empty:
-            continue
+            return None
 
         close = df["Close"]
 
@@ -201,7 +170,7 @@ for i, ticker in enumerate(ATIVOS):
         ]
 
         if len(filtro) < 2:
-            continue
+            return None
 
         positivos = filtro[
             filtro["Retorno"] > 0
@@ -231,55 +200,156 @@ for i, ticker in enumerate(ATIVOS):
             2
         ) if len(negativos) > 0 else 0
 
-        melhor_mes = round(
-            filtro["Retorno"].max(),
-            2
-        )
-
-        pior_mes = round(
-            filtro["Retorno"].min(),
-            2
-        )
-
         score = calcular_score(
             taxa_acerto,
             retorno_medio
         )
 
-        expectativa = round(
-            (
-                (taxa_acerto / 100) * gain_medio
-            )
-            +
-            (
-                ((100 - taxa_acerto) / 100)
-                * loss_medio
-            ),
-            2
-        )
-
-        dados = {
-            "Ativo": ticker.replace(".SA", ""),
+        return {
+            "Ativo": ticker,
             "Amostra": len(filtro),
             "Confiança": classificar_confianca(len(filtro)),
             "Taxa Acerto (%)": taxa_acerto,
             "Retorno Médio (%)": retorno_medio,
             "Gain Médio (%)": gain_medio,
             "Loss Médio (%)": loss_medio,
-            "Melhor Mês (%)": melhor_mes,
-            "Pior Mês (%)": pior_mes,
-            "Expectativa (%)": expectativa,
             "Score": score
         }
 
-        if len(filtro) >= 5:
-            resultados_principais.append(dados)
+    except:
+        return None
 
-        else:
-            resultados_jovens.append(dados)
 
-    except Exception:
-        pass
+def analisar_tecnico(ticker):
+
+    try:
+
+        df = yf.download(
+            ticker,
+            period="1y",
+            interval="1d",
+            progress=False,
+            auto_adjust=True
+        )
+
+        if df.empty:
+            return None
+
+        df.dropna(inplace=True)
+
+        close = df["Close"]
+        high = df["High"]
+        low = df["Low"]
+
+        # =================================================
+        # EMA69
+        # =================================================
+
+        ema69 = EMAIndicator(
+            close=close,
+            window=69
+        ).ema_indicator()
+
+        preco_atual = close.iloc[-1]
+
+        tendencia = preco_atual > ema69.iloc[-1]
+
+        # =================================================
+        # DMI
+        # =================================================
+
+        adx = ADXIndicator(
+            high=high,
+            low=low,
+            close=close,
+            window=14
+        )
+
+        di_plus = adx.adx_pos()
+        di_minus = adx.adx_neg()
+
+        dmi_ok = (
+            di_plus.iloc[-1]
+            >
+            di_minus.iloc[-1]
+        )
+
+        # =================================================
+        # ESTOCÁSTICO
+        # =================================================
+
+        stoch = StochasticOscillator(
+            high=high,
+            low=low,
+            close=close,
+            window=14,
+            smooth_window=3
+        )
+
+        k = stoch.stoch()
+        d = stoch.stoch_signal()
+
+        estocastico_ok = (
+            k.iloc[-1]
+            >
+            d.iloc[-1]
+        )
+
+        aprovado = (
+            tendencia
+            and dmi_ok
+            and estocastico_ok
+        )
+
+        return {
+            "Tendência": "✅" if tendencia else "❌",
+            "DMI": "✅" if dmi_ok else "❌",
+            "Estocástico": "✅" if estocastico_ok else "❌",
+            "Status": "APROVADO" if aprovado else "REPROVADO"
+        }
+
+    except:
+        return None
+
+# =====================================================
+# PROCESSAMENTO
+# =====================================================
+
+resultados = []
+aprovados = []
+
+barra = st.progress(0)
+
+for i, ticker in enumerate(ATIVOS):
+
+    sazonal = analisar_sazonalidade(
+        ticker
+    )
+
+    if sazonal is not None:
+
+        resultados.append(sazonal)
+
+        if sazonal["Score"] >= 60:
+
+            tecnico = analisar_tecnico(
+                ticker
+            )
+
+            if tecnico is not None:
+
+                linha = {
+                    "Ativo": ticker.replace(".SA", ""),
+                    "Score": sazonal["Score"],
+                    "Taxa Acerto (%)": sazonal["Taxa Acerto (%)"],
+                    "Retorno Médio (%)": sazonal["Retorno Médio (%)"],
+                    "Tendência": tecnico["Tendência"],
+                    "DMI": tecnico["DMI"],
+                    "Estocástico": tecnico["Estocástico"],
+                    "Status": tecnico["Status"]
+                }
+
+                aprovados.append(linha)
 
     barra.progress(
         (i + 1) / len(ATIVOS)
@@ -289,12 +359,16 @@ for i, ticker in enumerate(ATIVOS):
 # TABELA PRINCIPAL
 # =====================================================
 
-st.header("🏆 Ranking Principal")
+st.header("🏆 Ranking Sazonal")
 
-if len(resultados_principais) > 0:
+if len(resultados) > 0:
 
-    tabela = pd.DataFrame(
-        resultados_principais
+    tabela = pd.DataFrame(resultados)
+
+    tabela["Ativo"] = tabela["Ativo"].str.replace(
+        ".SA",
+        "",
+        regex=False
     )
 
     tabela.sort_values(
@@ -309,16 +383,7 @@ if len(resultados_principais) > 0:
     )
 
     st.dataframe(
-        tabela.style.format({
-            "Taxa Acerto (%)": "{:.2f}",
-            "Retorno Médio (%)": "{:.2f}",
-            "Gain Médio (%)": "{:.2f}",
-            "Loss Médio (%)": "{:.2f}",
-            "Melhor Mês (%)": "{:.2f}",
-            "Pior Mês (%)": "{:.2f}",
-            "Expectativa (%)": "{:.2f}",
-            "Score": "{:.2f}"
-        }),
+        tabela,
         use_container_width=True
     )
 
@@ -329,16 +394,20 @@ else:
     )
 
 # =====================================================
-# TABELA SECUNDÁRIA
+# TABELA FILTRADA
 # =====================================================
 
-st.header("⚠️ Ativos com Baixa Amostragem")
+st.header("✅ Sazonalidade + Setup Técnico")
 
-if len(resultados_jovens) > 0:
+if len(aprovados) > 0:
 
     tabela2 = pd.DataFrame(
-        resultados_jovens
+        aprovados
     )
+
+    tabela2 = tabela2[
+        tabela2["Status"] == "APROVADO"
+    ]
 
     tabela2.sort_values(
         by="Score",
@@ -352,47 +421,18 @@ if len(resultados_jovens) > 0:
     )
 
     st.dataframe(
-        tabela2.style.format({
-            "Taxa Acerto (%)": "{:.2f}",
-            "Retorno Médio (%)": "{:.2f}",
-            "Gain Médio (%)": "{:.2f}",
-            "Loss Médio (%)": "{:.2f}",
-            "Melhor Mês (%)": "{:.2f}",
-            "Pior Mês (%)": "{:.2f}",
-            "Expectativa (%)": "{:.2f}",
-            "Score": "{:.2f}"
-        }),
+        tabela2,
         use_container_width=True
     )
 
 else:
 
-    st.info(
-        "Nenhum ativo com baixa amostragem."
+    st.warning(
+        "Nenhum ativo aprovado."
     )
 
 # =====================================================
-# MELHOR ATIVO DO MÊS
-# =====================================================
-
-if len(resultados_principais) > 0:
-
-    melhor = tabela.iloc[0]
-
-    st.header("🥇 Melhor Resultado Estatístico")
-
-    st.success(f"""
-Ativo: {melhor['Ativo']}
-
-Taxa de Acerto: {melhor['Taxa Acerto (%)']}%
-
-Retorno Médio: {melhor['Retorno Médio (%)']}%
-
-Score: {melhor['Score']}
-""")
-
-# =====================================================
-# RODAPÉ
+# EXPLICAÇÃO
 # =====================================================
 
 st.markdown("---")
@@ -400,27 +440,38 @@ st.markdown("---")
 st.markdown("""
 ### 📌 Interpretação
 
-- Taxa Acerto:
-Percentual histórico de meses positivos.
+## Ranking Sazonal
+Mostra os ativos com melhor histórico estatístico para o mês atual.
 
-- Retorno Médio:
-Média histórica de retorno no mês atual.
+---
 
-- Gain Médio:
-Média apenas dos meses positivos.
+## Score
+Mistura:
+- frequência histórica de alta;
+- retorno médio.
 
-- Loss Médio:
-Média apenas dos meses negativos.
+Quanto maior:
+melhor a sazonalidade histórica.
 
-- Expectativa:
-Estimativa matemática histórica.
+---
 
-- Confiança:
-Robustez baseada na quantidade de anos.
+## Tabela "Sazonalidade + Setup Técnico"
 
-- Score:
-Pontuação estatística geral.
+Mostra apenas ativos que:
 
-⚠️ Aplicação puramente estatística.
+- possuem Score acima de 60;
+- estão acima da EMA69;
+- possuem DI+ acima do DI−;
+- possuem estocástico alinhado.
+
+---
+
+## Status APROVADO
+Significa:
+- sazonalidade forte;
+- tendência favorável;
+- momentum alinhado.
+
+⚠️ Aplicação puramente estatística/técnica.
 Não constitui recomendação de investimento.
 """)
