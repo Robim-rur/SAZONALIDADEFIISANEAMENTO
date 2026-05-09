@@ -151,7 +151,19 @@ def baixar_dados(ticker):
         if df.empty:
             return None
 
-        df = df[["Close"]].copy()
+        df.reset_index(inplace=True)
+
+        if "Close" not in df.columns:
+            return None
+
+        df = df[["Date", "Close"]].copy()
+
+        df["Close"] = pd.to_numeric(
+            df["Close"],
+            errors="coerce"
+        )
+
+        df.dropna(inplace=True)
 
         df["Retorno"] = (
             df["Close"].pct_change() * 100
@@ -159,8 +171,13 @@ def baixar_dados(ticker):
 
         df.dropna(inplace=True)
 
-        df["Ano"] = df.index.year
-        df["Mes"] = df.index.month
+        df["Ano"] = pd.to_datetime(
+            df["Date"]
+        ).dt.year
+
+        df["Mes"] = pd.to_datetime(
+            df["Date"]
+        ).dt.month
 
         return df
 
@@ -206,94 +223,99 @@ def multiplicador_confianca(amostra):
 
 def calcular_estatisticas(df, ticker, mes_atual):
 
-    df_mes = df[
-        df["Mes"] == mes_atual
-    ].copy()
+    try:
 
-    if len(df_mes) < 2:
-        return None
+        df_mes = df[
+            df["Mes"] == mes_atual
+        ].copy()
 
-    positivos = df_mes[
-        df_mes["Retorno"] > 0
-    ]
+        if len(df_mes) < 2:
+            return None
 
-    negativos = df_mes[
-        df_mes["Retorno"] <= 0
-    ]
+        positivos = df_mes[
+            df_mes["Retorno"] > 0
+        ]
 
-    amostra = len(df_mes)
+        negativos = df_mes[
+            df_mes["Retorno"] <= 0
+        ]
 
-    taxa_acerto = round(
-        (len(positivos) / amostra) * 100,
-        2
-    )
+        amostra = len(df_mes)
 
-    retorno_medio = round(
-        df_mes["Retorno"].mean(),
-        2
-    )
-
-    volatilidade = round(
-        df_mes["Retorno"].std(),
-        2
-    )
-
-    melhor_mes = round(
-        df_mes["Retorno"].max(),
-        2
-    )
-
-    pior_mes = round(
-        df_mes["Retorno"].min(),
-        2
-    )
-
-    gain_medio = round(
-        positivos["Retorno"].mean(),
-        2
-    ) if len(positivos) > 0 else 0
-
-    loss_medio = round(
-        negativos["Retorno"].mean(),
-        2
-    ) if len(negativos) > 0 else 0
-
-    sharpe = 0
-
-    if volatilidade != 0:
-        sharpe = round(
-            retorno_medio / volatilidade,
+        taxa_acerto = round(
+            (len(positivos) / amostra) * 100,
             2
         )
 
-    score_base = (
-        taxa_acerto * 0.4
-        + retorno_medio * 0.3
-        + sharpe * 20
-        - abs(pior_mes) * 0.1
-    )
+        retorno_medio = round(
+            df_mes["Retorno"].mean(),
+            2
+        )
 
-    score_final = (
-        score_base
-        * multiplicador_confianca(amostra)
-    )
+        volatilidade = round(
+            df_mes["Retorno"].std(),
+            2
+        )
 
-    score_final = round(score_final, 2)
+        melhor_mes = round(
+            df_mes["Retorno"].max(),
+            2
+        )
 
-    return {
-        "Ativo": ticker.replace(".SA", ""),
-        "Amostra": amostra,
-        "Confiança": classificar_confianca(amostra),
-        "Taxa Acerto (%)": taxa_acerto,
-        "Retorno Médio (%)": retorno_medio,
-        "Volatilidade (%)": volatilidade,
-        "Sharpe": sharpe,
-        "Gain Médio (%)": gain_medio,
-        "Loss Médio (%)": loss_medio,
-        "Melhor Mês (%)": melhor_mes,
-        "Pior Mês (%)": pior_mes,
-        "Score": score_final
-    }
+        pior_mes = round(
+            df_mes["Retorno"].min(),
+            2
+        )
+
+        gain_medio = round(
+            positivos["Retorno"].mean(),
+            2
+        ) if len(positivos) > 0 else 0
+
+        loss_medio = round(
+            negativos["Retorno"].mean(),
+            2
+        ) if len(negativos) > 0 else 0
+
+        sharpe = 0
+
+        if volatilidade != 0:
+            sharpe = round(
+                retorno_medio / volatilidade,
+                2
+            )
+
+        score_base = (
+            taxa_acerto * 0.4
+            + retorno_medio * 0.3
+            + sharpe * 20
+            - abs(pior_mes) * 0.1
+        )
+
+        score_final = (
+            score_base
+            * multiplicador_confianca(amostra)
+        )
+
+        score_final = round(score_final, 2)
+
+        return {
+            "Ativo": ticker.replace(".SA", ""),
+            "Amostra": amostra,
+            "Confiança": classificar_confianca(amostra),
+            "Taxa Acerto (%)": taxa_acerto,
+            "Retorno Médio (%)": retorno_medio,
+            "Volatilidade (%)": volatilidade,
+            "Sharpe": sharpe,
+            "Gain Médio (%)": gain_medio,
+            "Loss Médio (%)": loss_medio,
+            "Melhor Mês (%)": melhor_mes,
+            "Pior Mês (%)": pior_mes,
+            "Score": score_final
+        }
+
+    except:
+        return None
 
 
 @st.cache_data(ttl=3600)
@@ -314,20 +336,25 @@ def gerar_heatmap():
 
         for mes in range(1, 13):
 
-            df_mes = df[
-                df["Mes"] == mes
-            ]
+            try:
 
-            if len(df_mes) == 0:
-                valor = np.nan
+                df_mes = df[
+                    df["Mes"] == mes
+                ]
 
-            else:
-                valor = round(
-                    df_mes["Retorno"].mean(),
-                    2
-                )
+                if len(df_mes) == 0:
+                    valor = np.nan
 
-            linha[mes] = valor
+                else:
+                    valor = round(
+                        df_mes["Retorno"].mean(),
+                        2
+                    )
+
+                linha[mes] = valor
+
+            except:
+                linha[mes] = np.nan
 
         heatmap_data.append(linha)
 
@@ -393,7 +420,7 @@ for i, ticker in enumerate(ATIVOS):
     )
 
 # =========================================================
-# TABELA PRINCIPAL
+# RANKING PRINCIPAL
 # =========================================================
 
 st.header("🏆 Ranking Principal")
@@ -425,7 +452,7 @@ else:
     )
 
 # =========================================================
-# TABELA SECUNDÁRIA
+# RANKING SECUNDÁRIO
 # =========================================================
 
 st.header("⚠️ Ativos com Baixa Amostragem")
@@ -466,23 +493,32 @@ if not ranking.empty:
 
     st.header("🔥 Top 10 Scores")
 
-    top10 = ranking.head(10)
+    top10 = ranking.head(10).copy()
 
-    fig = px.bar(
-        top10,
-        x="Ativo",
-        y="Score",
-        text="Score"
+    top10["Score"] = pd.to_numeric(
+        top10["Score"],
+        errors="coerce"
     )
 
-    fig.update_layout(
-        height=600
-    )
+    top10.dropna(inplace=True)
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    if not top10.empty:
+
+        fig = px.bar(
+            top10,
+            x="Ativo",
+            y="Score",
+            text="Score"
+        )
+
+        fig.update_layout(
+            height=600
+        )
+
+        st.plotly_chart(
+            fig,
+            use_container_width=True
+        )
 
 # =========================================================
 # HEATMAP
@@ -494,39 +530,47 @@ heatmap_df = gerar_heatmap()
 
 if not heatmap_df.empty:
 
-    heatmap_plot = heatmap_df.set_index(
-        "Ativo"
-    )
+    try:
 
-    heatmap_plot.columns = [
-        "Jan",
-        "Fev",
-        "Mar",
-        "Abr",
-        "Mai",
-        "Jun",
-        "Jul",
-        "Ago",
-        "Set",
-        "Out",
-        "Nov",
-        "Dez"
-    ]
+        heatmap_plot = heatmap_df.set_index(
+            "Ativo"
+        )
 
-    fig2 = px.imshow(
-        heatmap_plot,
-        text_auto=True,
-        aspect="auto"
-    )
+        heatmap_plot.columns = [
+            "Jan",
+            "Fev",
+            "Mar",
+            "Abr",
+            "Mai",
+            "Jun",
+            "Jul",
+            "Ago",
+            "Set",
+            "Out",
+            "Nov",
+            "Dez"
+        ]
 
-    fig2.update_layout(
-        height=1000
-    )
+        fig2 = px.imshow(
+            heatmap_plot,
+            text_auto=True,
+            aspect="auto"
+        )
 
-    st.plotly_chart(
-        fig2,
-        use_container_width=True
-    )
+        fig2.update_layout(
+            height=1000
+        )
+
+        st.plotly_chart(
+            fig2,
+            use_container_width=True
+        )
+
+    except:
+
+        st.warning(
+            "Não foi possível gerar o heatmap."
+        )
 
 # =========================================================
 # DETALHAMENTO
@@ -570,26 +614,16 @@ if not ranking.empty:
                 "Retorno"
             ]].copy()
 
-            tabela.reset_index(
-                drop=True,
-                inplace=True
+            tabela["Ano"] = tabela[
+                "Ano"
+            ].astype(str)
+
+            tabela["Retorno"] = pd.to_numeric(
+                tabela["Retorno"],
+                errors="coerce"
             )
 
-            tabela["Ano"] = (
-                tabela["Ano"]
-                .astype(str)
-            )
-
-            tabela["Retorno"] = (
-                pd.to_numeric(
-                    tabela["Retorno"],
-                    errors="coerce"
-                )
-            )
-
-            tabela.dropna(
-                inplace=True
-            )
+            tabela.dropna(inplace=True)
 
             tabela["Retorno"] = (
                 tabela["Retorno"]
@@ -601,22 +635,42 @@ if not ranking.empty:
                 use_container_width=True
             )
 
-            if not tabela.empty:
+            grafico_df = pd.DataFrame({
+                "Ano": tabela["Ano"].tolist(),
+                "Retorno": tabela["Retorno"].tolist()
+            })
+
+            grafico_df.dropna(inplace=True)
+
+            if not grafico_df.empty:
 
                 fig3 = px.bar(
-                    tabela,
+                    grafico_df,
                     x="Ano",
                     y="Retorno",
                     text="Retorno"
                 )
 
+                fig3.update_traces(
+                    texttemplate='%{text:.2f}',
+                    textposition='outside'
+                )
+
                 fig3.update_layout(
-                    height=600
+                    height=600,
+                    xaxis_title="Ano",
+                    yaxis_title="Retorno (%)"
                 )
 
                 st.plotly_chart(
                     fig3,
                     use_container_width=True
+                )
+
+            else:
+
+                st.warning(
+                    "Não foi possível gerar o gráfico."
                 )
 
 # =========================================================
