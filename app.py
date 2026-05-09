@@ -1,22 +1,23 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import yfinance as yf
 from datetime import datetime
 
-# =========================================================
+# =====================================================
 # CONFIG
-# =========================================================
+# =====================================================
 
 st.set_page_config(
     page_title="Sazonalidade B3",
     layout="wide"
 )
 
-# =========================================================
-# SENHA
-# =========================================================
+# =====================================================
+# LOGIN
+# =====================================================
 
-SENHA_CORRETA = "LUCRO6"
+SENHA = "LUCRO6"
 
 if "logado" not in st.session_state:
     st.session_state.logado = False
@@ -25,94 +26,31 @@ if not st.session_state.logado:
 
     st.title("🔒 Login")
 
-    senha = st.text_input(
-        "Digite a senha:",
+    senha_digitada = st.text_input(
+        "Digite a senha",
         type="password"
     )
 
     if st.button("Entrar"):
 
-        if senha == SENHA_CORRETA:
+        if senha_digitada == SENHA:
             st.session_state.logado = True
             st.rerun()
 
         else:
-            st.error("Senha incorreta.")
+            st.error("Senha incorreta")
 
     st.stop()
 
-# =========================================================
-# LISTA DE ATIVOS
-# =========================================================
-
-ATIVOS = [
 # =====================================================
-    # FIIs DE TIJOLO
-    # =====================================================
+# TÍTULO
+# =====================================================
 
-    "HGLG11.SA",
-    "XPLG11.SA",
-    "KNRI11.SA",
-    "BTLG11.SA",
-    "VISC11.SA",
-    "TRXF11.SA",
-    "GARE11.SA",
-    "GGRC11.SA",
-    "LVBI11.SA",
-    "PVBI11.SA",
-    "VILG11.SA",
-    "HGRU11.SA",
-    "RBRP11.SA",
-    "PATL11.SA",
-    "RECT11.SA",
-    "MALL11.SA",
-    "HSML11.SA",
-    "XPML11.SA",
-    "JSRE11.SA",
-    "ALZR11.SA",
+st.title("📊 Sazonalidade Estatística B3")
 
-    # =====================================================
-    # ENERGIA
-    # =====================================================
-
-    "TAEE11.SA",
-    "TAEE4.SA",
-    "TAEE3.SA",
-    "CMIG4.SA",
-    "CMIG3.SA",
-    "CPLE6.SA",
-    "CPLE3.SA",
-    "EGIE3.SA",
-    "TRPL4.SA",
-    "TRPL3.SA",
-    "ALUP11.SA",
-    "ALUP4.SA",
-    "ALUP3.SA",
-    "ENGI11.SA",
-    "ENGI4.SA",
-    "ENGI3.SA",
-    "ENEV3.SA",
-    "EQTL3.SA",
-    "AURE3.SA",
-    "NEOE3.SA",
-    "AESB3.SA",
-
-    # =====================================================
-    # SANEAMENTO
-    # =====================================================
-
-    "SBSP3.SA",
-    "CSMG3.SA",
-    "SAPR11.SA",
-    "SAPR4.SA",
-    "SAPR3.SA",
-    "ORVR3.SA"
- 
-]
-
-# =========================================================
-# MESES
-# =========================================================
+# =====================================================
+# MÊS ATUAL
+# =====================================================
 
 MESES = {
     1: "Janeiro",
@@ -130,29 +68,109 @@ MESES = {
 }
 
 mes_atual = datetime.now().month
-nome_mes = MESES[mes_atual]
 
-# =========================================================
-# TÍTULO
-# =========================================================
+st.subheader(
+    f"Mês analisado: {MESES[mes_atual]}"
+)
 
-st.title("📊 Sazonalidade Estatística B3")
+# =====================================================
+# LISTA DE ATIVOS
+# =====================================================
 
-st.markdown(f"""
-## Mês analisado: {nome_mes}
+ATIVOS = [
 
-Análise histórica simples de:
-- FIIs
-- Energia
-- Saneamento
-""")
+    # =================================================
+    # FIIs
+    # =================================================
 
-# =========================================================
-# FUNÇÃO
-# =========================================================
+    "HGLG11.SA",
+    "KNRI11.SA",
+    "XPLG11.SA",
+    "BTLG11.SA",
+    "TRXF11.SA",
+    "GARE11.SA",
+    "GGRC11.SA",
+    "VISC11.SA",
+    "XPML11.SA",
+    "MALL11.SA",
+    "HSML11.SA",
+    "PVBI11.SA",
+    "LVBI11.SA",
+    "VILG11.SA",
+    "HGRU11.SA",
+    "ALZR11.SA",
 
-@st.cache_data(ttl=3600)
-def analisar_ativo(ticker):
+    # =================================================
+    # ENERGIA
+    # =================================================
+
+    "TAEE11.SA",
+    "TAEE4.SA",
+    "CMIG4.SA",
+    "CPLE6.SA",
+    "EGIE3.SA",
+    "TRPL4.SA",
+    "EQTL3.SA",
+    "ALUP11.SA",
+    "ENGI11.SA",
+    "NEOE3.SA",
+    "ENEV3.SA",
+    "AURE3.SA",
+
+    # =================================================
+    # SANEAMENTO
+    # =================================================
+
+    "SBSP3.SA",
+    "CSMG3.SA",
+    "SAPR4.SA",
+    "SAPR11.SA",
+    "ORVR3.SA"
+]
+
+# =====================================================
+# FUNÇÕES
+# =====================================================
+
+def classificar_confianca(amostra):
+
+    if amostra >= 10:
+        return "Excelente"
+
+    elif amostra >= 7:
+        return "Boa"
+
+    elif amostra >= 5:
+        return "Moderada"
+
+    else:
+        return "Baixa"
+
+
+def calcular_score(acerto, retorno):
+
+    score = (
+        (acerto * 0.7)
+        + (retorno * 0.3)
+    )
+
+    return round(score, 2)
+
+
+# =====================================================
+# RESULTADOS
+# =====================================================
+
+resultados_principais = []
+resultados_jovens = []
+
+# =====================================================
+# PROCESSAMENTO
+# =====================================================
+
+barra = st.progress(0)
+
+for i, ticker in enumerate(ATIVOS):
 
     try:
 
@@ -160,83 +178,127 @@ def analisar_ativo(ticker):
             ticker,
             period="15y",
             interval="1mo",
-            auto_adjust=True,
             progress=False
         )
 
         if df.empty:
-            return None
+            continue
 
-        df = df[["Close"]].copy()
+        close = df["Close"]
 
-        df["Retorno"] = (
-            df["Close"].pct_change() * 100
-        )
+        retorno = close.pct_change() * 100
 
-        df.dropna(inplace=True)
+        temp = pd.DataFrame()
 
-        df["Mes"] = df.index.month
+        temp["Retorno"] = retorno
 
-        df_mes = df[
-            df["Mes"] == mes_atual
+        temp.dropna(inplace=True)
+
+        temp["Mes"] = temp.index.month
+
+        filtro = temp[
+            temp["Mes"] == mes_atual
         ]
 
-        if len(df_mes) < 2:
-            return None
+        if len(filtro) < 2:
+            continue
 
-        positivos = df_mes[
-            df_mes["Retorno"] > 0
+        positivos = filtro[
+            filtro["Retorno"] > 0
+        ]
+
+        negativos = filtro[
+            filtro["Retorno"] <= 0
         ]
 
         taxa_acerto = round(
-            (len(positivos) / len(df_mes)) * 100,
+            (len(positivos) / len(filtro)) * 100,
             2
         )
 
         retorno_medio = round(
-            df_mes["Retorno"].mean(),
+            filtro["Retorno"].mean(),
             2
         )
 
-        return {
+        gain_medio = round(
+            positivos["Retorno"].mean(),
+            2
+        ) if len(positivos) > 0 else 0
+
+        loss_medio = round(
+            negativos["Retorno"].mean(),
+            2
+        ) if len(negativos) > 0 else 0
+
+        melhor_mes = round(
+            filtro["Retorno"].max(),
+            2
+        )
+
+        pior_mes = round(
+            filtro["Retorno"].min(),
+            2
+        )
+
+        score = calcular_score(
+            taxa_acerto,
+            retorno_medio
+        )
+
+        expectativa = round(
+            (
+                (taxa_acerto / 100) * gain_medio
+            )
+            +
+            (
+                ((100 - taxa_acerto) / 100)
+                * loss_medio
+            ),
+            2
+        )
+
+        dados = {
             "Ativo": ticker.replace(".SA", ""),
-            "Amostra": len(df_mes),
+            "Amostra": len(filtro),
+            "Confiança": classificar_confianca(len(filtro)),
             "Taxa Acerto (%)": taxa_acerto,
-            "Retorno Médio (%)": retorno_medio
+            "Retorno Médio (%)": retorno_medio,
+            "Gain Médio (%)": gain_medio,
+            "Loss Médio (%)": loss_medio,
+            "Melhor Mês (%)": melhor_mes,
+            "Pior Mês (%)": pior_mes,
+            "Expectativa (%)": expectativa,
+            "Score": score
         }
 
-    except:
-        return None
+        if len(filtro) >= 5:
+            resultados_principais.append(dados)
 
-# =========================================================
-# PROCESSAMENTO
-# =========================================================
+        else:
+            resultados_jovens.append(dados)
 
-resultado = []
-
-barra = st.progress(0)
-
-for i, ticker in enumerate(ATIVOS):
-
-    dados = analisar_ativo(ticker)
-
-    if dados is not None:
-        resultado.append(dados)
+    except Exception:
+        pass
 
     barra.progress(
         (i + 1) / len(ATIVOS)
     )
 
-# =========================================================
-# RESULTADO
-# =========================================================
+# =====================================================
+# TABELA PRINCIPAL
+# =====================================================
 
-if len(resultado) > 0:
+st.header("🏆 Ranking Principal")
 
-    tabela = pd.DataFrame(resultado)
+if len(resultados_principais) > 0:
+
+    tabela = pd.DataFrame(
+        resultados_principais
+    )
 
     tabela.sort_values(
-        by="Taxa Acerto (%)",
+        by="Score",
         ascending=False,
         inplace=True
     )
@@ -246,10 +308,17 @@ if len(resultado) > 0:
         inplace=True
     )
 
-    st.subheader("🏆 Ranking Histórico")
-
     st.dataframe(
-        tabela,
+        tabela.style.format({
+            "Taxa Acerto (%)": "{:.2f}",
+            "Retorno Médio (%)": "{:.2f}",
+            "Gain Médio (%)": "{:.2f}",
+            "Loss Médio (%)": "{:.2f}",
+            "Melhor Mês (%)": "{:.2f}",
+            "Pior Mês (%)": "{:.2f}",
+            "Expectativa (%)": "{:.2f}",
+            "Score": "{:.2f}"
+        }),
         use_container_width=True
     )
 
@@ -259,9 +328,72 @@ else:
         "Nenhum resultado encontrado."
     )
 
-# =========================================================
+# =====================================================
+# TABELA SECUNDÁRIA
+# =====================================================
+
+st.header("⚠️ Ativos com Baixa Amostragem")
+
+if len(resultados_jovens) > 0:
+
+    tabela2 = pd.DataFrame(
+        resultados_jovens
+    )
+
+    tabela2.sort_values(
+        by="Score",
+        ascending=False,
+        inplace=True
+    )
+
+    tabela2.reset_index(
+        drop=True,
+        inplace=True
+    )
+
+    st.dataframe(
+        tabela2.style.format({
+            "Taxa Acerto (%)": "{:.2f}",
+            "Retorno Médio (%)": "{:.2f}",
+            "Gain Médio (%)": "{:.2f}",
+            "Loss Médio (%)": "{:.2f}",
+            "Melhor Mês (%)": "{:.2f}",
+            "Pior Mês (%)": "{:.2f}",
+            "Expectativa (%)": "{:.2f}",
+            "Score": "{:.2f}"
+        }),
+        use_container_width=True
+    )
+
+else:
+
+    st.info(
+        "Nenhum ativo com baixa amostragem."
+    )
+
+# =====================================================
+# MELHOR ATIVO DO MÊS
+# =====================================================
+
+if len(resultados_principais) > 0:
+
+    melhor = tabela.iloc[0]
+
+    st.header("🥇 Melhor Resultado Estatístico")
+
+    st.success(f"""
+Ativo: {melhor['Ativo']}
+
+Taxa de Acerto: {melhor['Taxa Acerto (%)']}%
+
+Retorno Médio: {melhor['Retorno Médio (%)']}%
+
+Score: {melhor['Score']}
+""")
+
+# =====================================================
 # RODAPÉ
-# =========================================================
+# =====================================================
 
 st.markdown("---")
 
@@ -274,8 +406,21 @@ Percentual histórico de meses positivos.
 - Retorno Médio:
 Média histórica de retorno no mês atual.
 
-- Amostra:
-Quantidade de anos analisados.
+- Gain Médio:
+Média apenas dos meses positivos.
+
+- Loss Médio:
+Média apenas dos meses negativos.
+
+- Expectativa:
+Estimativa matemática histórica.
+
+- Confiança:
+Robustez baseada na quantidade de anos.
+
+- Score:
+Pontuação estatística geral.
 
 ⚠️ Aplicação puramente estatística.
+Não constitui recomendação de investimento.
 """)
